@@ -40,7 +40,8 @@ following structure, which is executed by this invoker:
         {
             MatchDynamicField => { Name => 'OTOBOIssue-ExternalID', Value => 'RotherOSS/otobo#123' },
 
-            # only used if no ticket is found
+            # only used if no ticket is found, SkipCreate => 1 only updates existing tickets
+            SkipCreate   => 0,
             Ticket       => { Title => '...', Queue => '...', Type => '...', State => 'new', Priority => '3 normal' },
             DynamicField => [ { Name => '...', Value => '...' }, { Name => '...', ConfigItemLookup => { ... } } ],
             Article      => { SenderType => 'customer', IsVisibleForCustomer => 1, From => '...', Subject => '...', Body => '...' },
@@ -114,7 +115,8 @@ sub PrepareRequest {
 =head2 HandleResponse()
 
 Creates tickets for new open issues, updates the state of existing tickets and schedules
-the follow-up invokers. Closed issues without a ticket are skipped.
+the follow-up invokers. Closed issues and issues with C<SkipCreate> are skipped if they
+have no ticket.
 
 =cut
 
@@ -152,6 +154,12 @@ sub HandleResponse {
             }
         }
         else {
+
+            # e.g. issues created from OTOBO: their ticket exists, they must not get a new one
+            if ( $Issue->{SkipCreate} ) {
+                $Count{Skipped}++;
+                next ISSUE;
+            }
 
             # an issue that is already closed needs no ticket
             if ( IsHashRefWithData( $Issue->{StateSync} ) && $Issue->{StateSync}->{IsClosed} ) {
@@ -287,4 +295,3 @@ sub _StateSync {
 }
 
 1;
-
