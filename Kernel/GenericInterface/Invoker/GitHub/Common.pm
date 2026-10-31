@@ -42,6 +42,10 @@ This module executes the data structure produced by the mapping:
             Value => 'some value',
         },
         {
+            Name  => 'MyMultiValueField',        # fields with MultiValue get a list,
+            Value => [ 'value 1', 'value 2' ],  # a single value or '' are converted
+        },
+        {
             Name             => 'MyConfigItemReference',
             ConfigItemLookup => {               # the value is the ID of the found config item
                 Class        => 'OTOBO Package',
@@ -283,8 +287,11 @@ sub DynamicFieldValuesSet {
         my $ValueSet = $DynamicFieldBackendObject->ValueSet(
             DynamicFieldConfig => $DynamicFieldConfig,
             ObjectID           => $Param{ObjectID},
-            Value              => $Value->{Value},
-            UserID             => 1,
+            Value              => $Self->_DynamicFieldValueNormalize(
+                DynamicFieldConfig => $DynamicFieldConfig,
+                Value              => $Value->{Value},
+            ),
+            UserID => 1,
         );
 
         if ( !$ValueSet ) {
@@ -297,6 +304,65 @@ sub DynamicFieldValuesSet {
     }
 
     return $Success;
+}
+
+=head2 DynamicFieldValuesUpdate()
+
+Sets only the dynamic field values that differ from the current values, so that unchanged
+values create no history entries and no events. Returns the number of changed values.
+
+    my $Changed = $CommonObject->DynamicFieldValuesUpdate(
+        ObjectID => 123,                        # TicketID or ArticleID
+        Values   => [ { Name => 'MyField', Value => 'some value' } ],
+    );
+
+=cut
+
+sub DynamicFieldValuesUpdate {
+    my ( $Self, %Param ) = @_;
+
+    my $DynamicFieldObject        = $Kernel::OM->Get('Kernel::System::DynamicField');
+    my $DynamicFieldBackendObject = $Kernel::OM->Get('Kernel::System::DynamicField::Backend');
+
+    my @ChangedValues;
+
+    VALUE:
+    for my $Value ( @{ $Param{Values} // [] } ) {
+        my $DynamicFieldConfig = $DynamicFieldObject->DynamicFieldGet(
+            Name => $Value->{Name},
+        );
+
+        # unknown fields are reported by DynamicFieldValuesSet()
+        if ( !IsHashRefWithData($DynamicFieldConfig) ) {
+            push @ChangedValues, $Value;
+            next VALUE;
+        }
+
+        my $OldValue = $DynamicFieldBackendObject->ValueGet(
+            DynamicFieldConfig => $DynamicFieldConfig,
+            ObjectID           => $Param{ObjectID},
+        );
+        my $NewValue = $Self->_DynamicFieldValueNormalize(
+            DynamicFieldConfig => $DynamicFieldConfig,
+            Value              => $Value->{Value},
+        );
+
+        # compare as list of strings, single values and multi values alike
+        my $OldString = join "\n", $Self->AsList($OldValue);
+        my $NewString = join "\n", $Self->AsList($NewValue);
+        next VALUE if $OldString eq $NewString;
+
+        push @ChangedValues, $Value;
+    }
+
+    return 0 if !@ChangedValues;
+
+    $Self->DynamicFieldValuesSet(
+        ObjectID => $Param{ObjectID},
+        Values   => \@ChangedValues,
+    );
+
+    return scalar @ChangedValues;
 }
 
 =head2 ArticleAdd()
@@ -448,6 +514,18 @@ sub FollowUpSchedule {
     }
 
     return 1;
+}
+
+# Multi value fields need an array reference. The mapping returns a single value as string
+# and no value as empty string, both are converted to a list.
+sub _DynamicFieldValueNormalize {
+    my ( $Self, %Param ) = @_;
+
+    return $Param{Value} if !$Param{DynamicFieldConfig}->{Config}->{MultiValue};
+
+    my @Values = grep { $_ ne '' } $Self->AsList( $Param{Value} );
+
+    return \@Values;
 }
 
 1;

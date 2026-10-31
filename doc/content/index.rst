@@ -15,12 +15,13 @@ Invokers
 
 ``GitHub::IssuePoll``
     Polls issues, e.g. with ``GET /search/issues``. The outbound mapping builds the query
-    (organization, label, time window). For every issue of the inbound mapping:
+    (organization, issue type, label, time window). For every issue of the inbound mapping:
 
     - no ticket found (``MatchDynamicField``) and the issue is open: the ticket is created with
       its dynamic fields and the first article,
-    - ticket found: the ticket is closed or reopened if the issue was closed or reopened
-      (``StateSync``),
+    - ticket found: the dynamic fields of ``Update`` are set if their values changed, e.g. the
+      labels of the issue, and the ticket is closed or reopened if the issue was closed or
+      reopened (``StateSync``),
     - the ``FollowUp`` invokers are scheduled for the ticket, e.g. ``CommentsGet``.
 
 ``GitHub::CommentsGet``
@@ -28,6 +29,9 @@ Invokers
     ``GET /repos/:Owner/:Repo/issues/:Number/comments``. Comments whose ``MatchDynamicField``
     value already exists in an article of the ticket are skipped, so every comment is
     imported only once.
+
+Fields with *Multi value* get a list of values, the mapping simply repeats the ``Value``
+element. A single value or no value is converted to a list.
 
 Dynamic fields can get the ID of a config item instead of a value (``ConfigItemLookup``), e.g.
 to fill a reference field with the CMDB entry of the repository. With ``Required`` the issue is

@@ -46,7 +46,10 @@ following structure, which is executed by this invoker:
             DynamicField => [ { Name => '...', Value => '...' }, { Name => '...', ConfigItemLookup => { ... } } ],
             Article      => { SenderType => 'customer', IsVisibleForCustomer => 1, From => '...', Subject => '...', Body => '...' },
 
-            # only used for existing tickets
+            # only used for existing tickets, values are only set if they changed
+            Update => {
+                DynamicField => [ { Name => 'OTOBOIssue-Labels', Value => [ 'bug', 'documentation' ] } ],
+            },
             StateSync => {
                 IsClosed    => 1,                     # state of the issue
                 ClosedState => 'closed successful',   # ticket state if the issue is closed
@@ -114,9 +117,9 @@ sub PrepareRequest {
 
 =head2 HandleResponse()
 
-Creates tickets for new open issues, updates the state of existing tickets and schedules
-the follow-up invokers. Closed issues and issues with C<SkipCreate> are skipped if they
-have no ticket.
+Creates tickets for new open issues, updates the dynamic fields and the state of existing
+tickets and schedules the follow-up invokers. Closed issues and issues with C<SkipCreate>
+are skipped if they have no ticket.
 
 =cut
 
@@ -149,7 +152,16 @@ sub HandleResponse {
         );
 
         if ($TicketID) {
-            if ( $Self->_StateSync( TicketID => $TicketID, StateSync => $Issue->{StateSync} ) ) {
+            my $FieldsChanged = $Self->_TicketUpdate(
+                TicketID => $TicketID,
+                Update   => $Issue->{Update},
+            );
+            my $StateChanged = $Self->_StateSync(
+                TicketID  => $TicketID,
+                StateSync => $Issue->{StateSync},
+            );
+
+            if ( $FieldsChanged || $StateChanged ) {
                 $Count{Updated}++;
             }
         }
@@ -253,6 +265,27 @@ sub _TicketCreate {
     );
 
     return $TicketID;
+}
+
+# Sets the dynamic fields of an existing ticket, only values that changed.
+# Returns the number of changed values.
+sub _TicketUpdate {
+    my ( $Self, %Param ) = @_;
+
+    my $Update = $Param{Update};
+    return 0 if !IsHashRefWithData($Update);
+
+    my $CommonObject = $Self->{CommonObject};
+
+    my $DynamicFieldValues = $CommonObject->DynamicFieldValuesPrepare(
+        DynamicField => $Update->{DynamicField},
+    );
+    return 0 if !$DynamicFieldValues;
+
+    return $CommonObject->DynamicFieldValuesUpdate(
+        ObjectID => $Param{TicketID},
+        Values   => $DynamicFieldValues,
+    );
 }
 
 # Closes or reopens the ticket if the issue was closed or reopened.

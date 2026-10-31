@@ -1,0 +1,216 @@
+diff -ruN WebService-GitHub.v1/Kernel/GenericInterface/Invoker/GitHub/Common.pm WebService-GitHub/Kernel/GenericInterface/Invoker/GitHub/Common.pm
+--- WebService-GitHub.v1/Kernel/GenericInterface/Invoker/GitHub/Common.pm	2026-10-31 19:32:27.579546213 +0100
++++ WebService-GitHub/Kernel/GenericInterface/Invoker/GitHub/Common.pm	2026-10-31 19:32:27.597934441 +0100
+@@ -42,6 +42,10 @@
+             Value => 'some value',
+         },
+         {
++            Name  => 'MyMultiValueField',        # fields with MultiValue get a list,
++            Value => [ 'value 1', 'value 2' ],  # a single value or '' are converted
++        },
++        {
+             Name             => 'MyConfigItemReference',
+             ConfigItemLookup => {               # the value is the ID of the found config item
+                 Class        => 'OTOBO Package',
+@@ -283,8 +287,11 @@
+         my $ValueSet = $DynamicFieldBackendObject->ValueSet(
+             DynamicFieldConfig => $DynamicFieldConfig,
+             ObjectID           => $Param{ObjectID},
+-            Value              => $Value->{Value},
+-            UserID             => 1,
++            Value              => $Self->_DynamicFieldValueNormalize(
++                DynamicFieldConfig => $DynamicFieldConfig,
++                Value              => $Value->{Value},
++            ),
++            UserID => 1,
+         );
+ 
+         if ( !$ValueSet ) {
+@@ -299,6 +306,65 @@
+     return $Success;
+ }
+ 
++=head2 DynamicFieldValuesUpdate()
++
++Sets only the dynamic field values that differ from the current values, so that unchanged
++values create no history entries and no events. Returns the number of changed values.
++
++    my $Changed = $CommonObject->DynamicFieldValuesUpdate(
++        ObjectID => 123,                        # TicketID or ArticleID
++        Values   => [ { Name => 'MyField', Value => 'some value' } ],
++    );
++
++=cut
++
++sub DynamicFieldValuesUpdate {
++    my ( $Self, %Param ) = @_;
++
++    my $DynamicFieldObject        = $Kernel::OM->Get('Kernel::System::DynamicField');
++    my $DynamicFieldBackendObject = $Kernel::OM->Get('Kernel::System::DynamicField::Backend');
++
++    my @ChangedValues;
++
++    VALUE:
++    for my $Value ( @{ $Param{Values} // [] } ) {
++        my $DynamicFieldConfig = $DynamicFieldObject->DynamicFieldGet(
++            Name => $Value->{Name},
++        );
++
++        # unknown fields are reported by DynamicFieldValuesSet()
++        if ( !IsHashRefWithData($DynamicFieldConfig) ) {
++            push @ChangedValues, $Value;
++            next VALUE;
++        }
++
++        my $OldValue = $DynamicFieldBackendObject->ValueGet(
++            DynamicFieldConfig => $DynamicFieldConfig,
++            ObjectID           => $Param{ObjectID},
++        );
++        my $NewValue = $Self->_DynamicFieldValueNormalize(
++            DynamicFieldConfig => $DynamicFieldConfig,
++            Value              => $Value->{Value},
++        );
++
++        # compare as list of strings, single values and multi values alike
++        my $OldString = join "\n", $Self->AsList($OldValue);
++        my $NewString = join "\n", $Self->AsList($NewValue);
++        next VALUE if $OldString eq $NewString;
++
++        push @ChangedValues, $Value;
++    }
++
++    return 0 if !@ChangedValues;
++
++    $Self->DynamicFieldValuesSet(
++        ObjectID => $Param{ObjectID},
++        Values   => \@ChangedValues,
++    );
++
++    return scalar @ChangedValues;
++}
++
+ =head2 ArticleAdd()
+ 
+ Creates an article (default channel Internal) and sets its dynamic fields.
+@@ -450,4 +516,16 @@
+     return 1;
+ }
+ 
++# Multi value fields need an array reference. The mapping returns a single value as string
++# and no value as empty string, both are converted to a list.
++sub _DynamicFieldValueNormalize {
++    my ( $Self, %Param ) = @_;
++
++    return $Param{Value} if !$Param{DynamicFieldConfig}->{Config}->{MultiValue};
++
++    my @Values = grep { $_ ne '' } $Self->AsList( $Param{Value} );
++
++    return \@Values;
++}
++
+ 1;
+diff -ruN WebService-GitHub.v1/Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm WebService-GitHub/Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm
+--- WebService-GitHub.v1/Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm	2026-10-31 19:32:27.579522681 +0100
++++ WebService-GitHub/Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm	2026-10-31 19:32:41.611604770 +0100
+@@ -46,7 +46,10 @@
+             DynamicField => [ { Name => '...', Value => '...' }, { Name => '...', ConfigItemLookup => { ... } } ],
+             Article      => { SenderType => 'customer', IsVisibleForCustomer => 1, From => '...', Subject => '...', Body => '...' },
+ 
+-            # only used for existing tickets
++            # only used for existing tickets, values are only set if they changed
++            Update => {
++                DynamicField => [ { Name => 'OTOBOIssue-Labels', Value => [ 'bug', 'documentation' ] } ],
++            },
+             StateSync => {
+                 IsClosed    => 1,                     # state of the issue
+                 ClosedState => 'closed successful',   # ticket state if the issue is closed
+@@ -114,9 +117,9 @@
+ 
+ =head2 HandleResponse()
+ 
+-Creates tickets for new open issues, updates the state of existing tickets and schedules
+-the follow-up invokers. Closed issues and issues with C<SkipCreate> are skipped if they
+-have no ticket.
++Creates tickets for new open issues, updates the dynamic fields and the state of existing
++tickets and schedules the follow-up invokers. Closed issues and issues with C<SkipCreate>
++are skipped if they have no ticket.
+ 
+ =cut
+ 
+@@ -149,7 +152,16 @@
+         );
+ 
+         if ($TicketID) {
+-            if ( $Self->_StateSync( TicketID => $TicketID, StateSync => $Issue->{StateSync} ) ) {
++            my $FieldsChanged = $Self->_TicketUpdate(
++                TicketID => $TicketID,
++                Update   => $Issue->{Update},
++            );
++            my $StateChanged = $Self->_StateSync(
++                TicketID  => $TicketID,
++                StateSync => $Issue->{StateSync},
++            );
++
++            if ( $FieldsChanged || $StateChanged ) {
+                 $Count{Updated}++;
+             }
+         }
+@@ -255,6 +267,27 @@
+     return $TicketID;
+ }
+ 
++# Sets the dynamic fields of an existing ticket, only values that changed.
++# Returns the number of changed values.
++sub _TicketUpdate {
++    my ( $Self, %Param ) = @_;
++
++    my $Update = $Param{Update};
++    return 0 if !IsHashRefWithData($Update);
++
++    my $CommonObject = $Self->{CommonObject};
++
++    my $DynamicFieldValues = $CommonObject->DynamicFieldValuesPrepare(
++        DynamicField => $Update->{DynamicField},
++    );
++    return 0 if !$DynamicFieldValues;
++
++    return $CommonObject->DynamicFieldValuesUpdate(
++        ObjectID => $Param{TicketID},
++        Values   => $DynamicFieldValues,
++    );
++}
++
+ # Closes or reopens the ticket if the issue was closed or reopened.
+ # Returns 1 if the state was changed.
+ sub _StateSync {
+diff -ruN WebService-GitHub.v1/doc/content/index.rst WebService-GitHub/doc/content/index.rst
+--- WebService-GitHub.v1/doc/content/index.rst	2026-10-31 19:32:27.579649072 +0100
++++ WebService-GitHub/doc/content/index.rst	2026-10-31 19:38:15.884264127 +0100
+@@ -15,12 +15,13 @@
+ 
+ ``GitHub::IssuePoll``
+     Polls issues, e.g. with ``GET /search/issues``. The outbound mapping builds the query
+-    (organization, label, time window). For every issue of the inbound mapping:
++    (organization, issue type, label, time window). For every issue of the inbound mapping:
+ 
+     - no ticket found (``MatchDynamicField``) and the issue is open: the ticket is created with
+       its dynamic fields and the first article,
+-    - ticket found: the ticket is closed or reopened if the issue was closed or reopened
+-      (``StateSync``),
++    - ticket found: the dynamic fields of ``Update`` are set if their values changed, e.g. the
++      labels of the issue, and the ticket is closed or reopened if the issue was closed or
++      reopened (``StateSync``),
+     - the ``FollowUp`` invokers are scheduled for the ticket, e.g. ``CommentsGet``.
+ 
+ ``GitHub::CommentsGet``
+@@ -29,6 +30,9 @@
+     value already exists in an article of the ticket are skipped, so every comment is
+     imported only once.
+ 
++Fields with *Multi value* get a list of values, the mapping simply repeats the ``Value``
++element. A single value or no value is converted to a list.
++
+ Dynamic fields can get the ID of a config item instead of a value (``ConfigItemLookup``), e.g.
+ to fill a reference field with the CMDB entry of the repository. With ``Required`` the issue is
+ skipped if no config item is found. The structures are described in the POD of the modules
+
