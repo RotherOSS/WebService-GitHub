@@ -91,17 +91,23 @@ sub new {
 
 =head2 PrepareRequest()
 
-The request is built completely by the outbound mapping, the trigger data
-(e.g. C<Dummy> of TriggerInvoker) is not sent.
+The request is built completely by the outbound mapping. The mapping is skipped for
+empty data, so the trigger data (e.g. C<Dummy> of TriggerInvoker) is passed on and
+replaced by the mapping.
 
 =cut
 
 sub PrepareRequest {
     my ( $Self, %Param ) = @_;
 
+    my %Data = IsHashRefWithData( $Param{Data} ) ? %{ $Param{Data} } : ();
+
+    # never pass empty data, otherwise the outbound mapping is not executed
+    $Data{Invoker} = $Self->{Invoker};
+
     return {
         Success => 1,
-        Data    => {},
+        Data    => \%Data,
     };
 }
 
