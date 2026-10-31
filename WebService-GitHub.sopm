@@ -6,13 +6,14 @@
     <Vendor>Rother OSS GmbH</Vendor>
     <URL>https://otobo.io/</URL>
     <License>GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007</License>
-    <Description Lang="en">Generic interface invokers to import GitHub issues and comments as tickets and articles.</Description>
-    <Description Lang="de">Generic-Interface-Invoker, die GitHub-Issues und -Kommentare als Tickets und Artikel importieren.</Description>
+    <Description Lang="en">Web service invokers to import GitHub issues and comments as tickets and articles and keep their state in sync.</Description>
+    <Description Lang="de">Webservice-Invoker, die GitHub-Issues und -Kommentare als Tickets und Artikel importieren und den Status abgleichen.</Description>
     <Filelist>
         <File Permission="660" Location="Kernel/Config/Files/XML/WebServiceGitHub.xml"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/Common.pm"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/CommentsGet.pm"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm"/>
         <File Permission="660" Location="doc/content/index.rst"/>
+        <File Permission="660" Location="Webservice-CustomerOperations.sopm"/>
     </Filelist>
 </otobo_package>
