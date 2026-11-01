@@ -48,8 +48,8 @@ This module executes the data structure produced by the mapping:
         {
             Name             => 'MyConfigItemReference',
             ConfigItemLookup => {               # the value is the ID of the found config item
-                Class        => 'OTOBO Package',
-                DynamicField => 'OTOBOPackage-GitHubRepository',   # or Name => 'config item name'
+                Class        => 'Software',
+                DynamicField => 'MyGitHubRepositoryField',   # or Name => 'config item name'
                 Value        => 'otobo',
                 Required     => 1,              # skip the issue if no config item is found
             },
@@ -112,8 +112,8 @@ Returns the ID of the ticket with the given dynamic field value, or nothing.
 
     my $TicketID = $CommonObject->TicketFind(
         MatchDynamicField => {
-            Name  => 'OTOBOIssue-ExternalID',
-            Value => 'RotherOSS/otobo-dev#3',
+            Name  => 'GitHubIssueID',
+            Value => 'RotherOSS/otobo#3',
         },
     );
 
@@ -211,9 +211,9 @@ Returns the ID of the config item of a class with a given name or dynamic field 
 Needs the CMDB (Kernel::System::ITSMConfigItem).
 
     my $ConfigItemID = $CommonObject->ConfigItemLookup(
-        Class        => 'OTOBO Package',
-        DynamicField => 'OTOBOPackage-GitHubRepository',    # or Name => 1 to search the name
-        Value        => 'otobo-dev',
+        Class        => 'Software',
+        DynamicField => 'MyGitHubRepositoryField',    # or Name => 1 to search the name
+        Value        => 'otobo',
     );
 
 =cut
@@ -437,7 +437,7 @@ Checks if an article of the ticket has the given dynamic field value.
     my $Exists = $CommonObject->ArticleExists(
         TicketID          => 123,
         MatchDynamicField => {
-            Name  => 'OTOBOIssue-ExternalCommentID',
+            Name  => 'GitHubCommentID',
             Value => '6544623469',
         },
     );

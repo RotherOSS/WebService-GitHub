@@ -1,0 +1,475 @@
+---
+Debugger:
+  DebugThreshold: debug
+  TestMode: '0'
+Description: GitHub issues <-> tickets (package WebService-GitHub). Set the token and CHANGE-ME in the mappings.
+FrameworkVersion: 11.1.x
+Provider:
+  Operation: {}
+  Transport:
+    Type: ''
+RemoteSystem: https://api.github.com
+Requester:
+  Invoker:
+    CommentCreate:
+      Description: Post an agent article visible for the customer as comment on the GitHub issue
+      Events:
+      - Asynchronous: '1'
+        Condition:
+          Condition:
+            '1':
+              Fields:
+                DynamicField_GitHubIssueID:
+                  Match: .+
+                  Type: Regexp
+                IsVisibleForCustomer:
+                  Match: '1'
+                  Type: String
+                SenderType:
+                  Match: agent
+                  Type: String
+              Type: and
+          ConditionLinking: and
+        Event: ArticleCreate
+      MappingInbound: {}
+      MappingOutbound:
+        Config:
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- New comment on the GitHub issue: the article that triggered the event, with the agent name -->
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:variable name="IssueID" select="Ticket/DynamicField[Name='GitHubIssueID']/Value"/>
+                        <Owner><xsl:value-of select="substring-before($IssueID, '/')"/></Owner>
+                        <Repo><xsl:value-of select="substring-before(substring-after($IssueID, '/'), '#')"/></Repo>
+                        <Number><xsl:value-of select="substring-after($IssueID, '#')"/></Number>
+                        <!-- only the agent name, the e-mail address of From ("Name" <address>) is not published -->
+                        <xsl:variable name="AgentName" select="translate(substring-before(concat(Article/From, ' &lt;'), ' &lt;'), '&quot;', '')"/>
+                        <body><xsl:value-of select="concat('**', $AgentName, '**', '&#10;&#10;', Article/Body)"/></body>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      RequestArticleFields:
+      - Body
+      - From
+      - Subject
+      RequestDynamicFieldsArticle: []
+      RequestDynamicFieldsTicket:
+      - GitHubIssueID
+      RequestTicketFields:
+      - Title
+      - State
+      Type: Ticket::TicketUpdate
+    CommentsGet:
+      Description: Import the comments of a GitHub issue as articles (scheduled by IssuePoll)
+      MappingInbound:
+        Config:
+          PreRegExFilter:
+          - Replace: _
+            Search: '[^A-Za-z0-9_.-]'
+          - Replace: _$1
+            Search: ^([0-9.-])
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- GitHub comments -> articles visible for the customer, each comment is imported once
+                     (GitHubCommentID).
+
+                     BotLogin: GitHub account of the token of this web service, CHANGE-ME.
+                               Its comments were posted from OTOBO (CommentCreate) and are skipped. -->
+                <xsl:variable name="BotLogin">CHANGE-ME</xsl:variable>
+
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:for-each select="anon[user/login != $BotLogin]">
+                            <Article>
+                                <MatchDynamicField>
+                                    <Name>GitHubCommentID</Name>
+                                    <Value><xsl:value-of select="id"/></Value>
+                                </MatchDynamicField>
+                                <SenderType>customer</SenderType>
+                                <IsVisibleForCustomer>1</IsVisibleForCustomer>
+                                <From><xsl:value-of select="concat(user/login, ' (GitHub)')"/></From>
+                                <Subject><xsl:value-of select="concat('Comment of ', user/login, ' on GitHub')"/></Subject>
+                                <Body><xsl:value-of select="concat(body, '&#10;&#10;-- &#10;', html_url)"/></Body>
+                                <DynamicField>
+                                    <Name>GitHubCommentID</Name>
+                                    <Value><xsl:value-of select="id"/></Value>
+                                </DynamicField>
+                            </Article>
+                        </xsl:for-each>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      MappingOutbound:
+        Config:
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- Route values from the follow-up data of IssuePoll, at most 100 comments -->
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <Owner><xsl:value-of select="Owner"/></Owner>
+                        <Repo><xsl:value-of select="Repo"/></Repo>
+                        <Number><xsl:value-of select="Number"/></Number>
+                        <per_page>100</per_page>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      Type: GitHub::CommentsGet
+    IssueClose:
+      CountLastArticle: '1'
+      CustomerVisibility: '1'
+      Description: Close the GitHub issue when the ticket is closed
+      Events:
+      - Asynchronous: '1'
+        Condition:
+          Condition:
+            '1':
+              Fields:
+                DynamicField_GitHubIssueID:
+                  Match: .+
+                  Type: Regexp
+                StateType:
+                  Match: closed
+                  Type: String
+              Type: and
+          ConditionLinking: and
+        Event: TicketStateUpdate
+      MappingInbound: {}
+      MappingOutbound:
+        Config:
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- Close the GitHub issue, "closed unsuccessful" is closed as not planned -->
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:variable name="IssueID" select="Ticket/DynamicField[Name='GitHubIssueID']/Value"/>
+                        <Owner><xsl:value-of select="substring-before($IssueID, '/')"/></Owner>
+                        <Repo><xsl:value-of select="substring-before(substring-after($IssueID, '/'), '#')"/></Repo>
+                        <Number><xsl:value-of select="substring-after($IssueID, '#')"/></Number>
+                        <state>closed</state>
+                        <xsl:choose>
+                            <xsl:when test="contains(Ticket/State, 'unsuccessful')">
+                                <state_reason>not_planned</state_reason>
+                            </xsl:when>
+                            <xsl:otherwise>
+                                <state_reason>completed</state_reason>
+                            </xsl:otherwise>
+                        </xsl:choose>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      RequestArticleFields: []
+      RequestDynamicFieldsArticle: []
+      RequestDynamicFieldsTicket:
+      - GitHubIssueID
+      RequestTicketFields:
+      - Title
+      - State
+      Type: Ticket::TicketUpdate
+    IssueCreate:
+      CountLastArticle: '100'
+      CustomerVisibility: '1'
+      Description: Create a GitHub issue when GitHubIssueRepository is set on a ticket without issue
+      DynamicFieldList:
+      - GitHubIssueID
+      - GitHubIssueURL
+      Events:
+      - Asynchronous: '1'
+        Condition:
+          Condition:
+            '1':
+              Fields:
+                DynamicField_GitHubIssueID:
+                  Match: Kernel::GenericInterface::Event::Validation::GitHubIssueNotCreated
+                  Type: Module
+                DynamicField_GitHubIssueRepository:
+                  Match: ^[^/\s]+/[^/\s]+$
+                  Type: Regexp
+              Type: and
+          ConditionLinking: and
+        Event: TicketDynamicFieldUpdate_GitHubIssueRepository
+      MappingInbound:
+        Config:
+          PreRegExFilter:
+          - Replace: _
+            Search: '[^A-Za-z0-9_.-]'
+          - Replace: _$1
+            Search: ^([0-9.-])
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- Store the GitHub issue in the ticket. Only on success, an error response has no number. -->
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:if test="number">
+                            <Ticket>
+                                <DynamicField>
+                                    <Name>GitHubIssueID</Name>
+                                    <Value><xsl:value-of select="concat(substring-after(repository_url, '/repos/'), '#', number)"/></Value>
+                                </DynamicField>
+                                <DynamicField>
+                                    <Name>GitHubIssueURL</Name>
+                                    <Value><xsl:value-of select="html_url"/></Value>
+                                </DynamicField>
+                            </Ticket>
+                        </xsl:if>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      MappingOutbound:
+        Config:
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- New GitHub issue in the repository of GitHubIssueRepository ("Owner/Repository"):
+                     ticket title and the first article visible for the customer.
+                     The articles are sorted newest first, so the first article is the last element.
+
+                     IssueType: issue type of the organization, empty for no type -->
+                <xsl:variable name="IssueType"></xsl:variable>
+
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:variable name="Repository" select="Ticket/DynamicField[Name='GitHubIssueRepository']/Value"/>
+                        <Owner><xsl:value-of select="substring-before($Repository, '/')"/></Owner>
+                        <Repo><xsl:value-of select="substring-after($Repository, '/')"/></Repo>
+                        <title><xsl:value-of select="Ticket/Title"/></title>
+                        <body><xsl:value-of select="Article[last()]/Body"/></body>
+                        <xsl:if test="$IssueType != ''">
+                            <type><xsl:value-of select="$IssueType"/></type>
+                        </xsl:if>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      RequestArticleFields:
+      - Body
+      - From
+      - Subject
+      RequestDynamicFieldsArticle: []
+      RequestDynamicFieldsTicket:
+      - GitHubIssueRepository
+      - GitHubIssueID
+      RequestTicketFields:
+      - Title
+      - State
+      Type: Ticket::TicketCreate
+    IssuePoll:
+      Description: Poll the GitHub issues of the organization, create and update tickets (daemon cron task GitHubIssuePoll)
+      MappingInbound:
+        Config:
+          PreRegExFilter:
+          - Replace: _
+            Search: '[^A-Za-z0-9_.-]'
+          - Replace: _$1
+            Search: ^([0-9.-])
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- GitHub issues -> tickets
+
+                     BotLogin: GitHub account of the token of this web service, CHANGE-ME.
+                               Its issues were created from OTOBO (IssueCreate): they only update their
+                               existing ticket (state, labels, comments), no new ticket is created for them.
+                     Queue, Type, State and Priority of new tickets can be changed below. The priority is only
+                     taken from the issue field "Priority" of the organization when the ticket is created. -->
+                <xsl:variable name="BotLogin">CHANGE-ME</xsl:variable>
+
+                <xsl:template match="/RootElement">
+                    <RootElement>
+                        <xsl:for-each select="items[not(pull_request)]">
+                            <xsl:variable name="Repository" select="substring-after(repository_url, '/repos/')"/>
+                            <xsl:variable name="IssueID" select="concat($Repository, '#', number)"/>
+
+                            <!-- issue field "Priority" of the organization -> ticket priority -->
+                            <xsl:variable name="IssuePriority" select="issue_field_values[issue_field_name = 'Priority']/single_select_option/name"/>
+                            <xsl:variable name="TicketPriority">
+                                <xsl:choose>
+                                    <xsl:when test="$IssuePriority = 'Urgent'">5 very high</xsl:when>
+                                    <xsl:when test="$IssuePriority = 'High'">4 high</xsl:when>
+                                    <xsl:when test="$IssuePriority = 'Low'">2 low</xsl:when>
+                                    <xsl:otherwise>3 normal</xsl:otherwise>
+                                </xsl:choose>
+                            </xsl:variable>
+
+                            <!-- labels of the issue, a value per label -->
+                            <xsl:variable name="Labels">
+                                <DynamicField>
+                                    <Name>GitHubIssueLabels</Name>
+                                    <xsl:for-each select="labels">
+                                        <Value><xsl:value-of select="name"/></Value>
+                                    </xsl:for-each>
+                                </DynamicField>
+                            </xsl:variable>
+
+                            <Issue>
+                                <MatchDynamicField>
+                                    <Name>GitHubIssueID</Name>
+                                    <Value><xsl:value-of select="$IssueID"/></Value>
+                                </MatchDynamicField>
+                                <SkipCreate><xsl:value-of select="number(user/login = $BotLogin)"/></SkipCreate>
+                                <Ticket>
+                                    <Title><xsl:value-of select="title"/></Title>
+                                    <Queue>Raw</Queue>
+                                    <Type>Unclassified</Type>
+                                    <State>new</State>
+                                    <Priority><xsl:value-of select="$TicketPriority"/></Priority>
+                                </Ticket>
+                                <!-- GitHubIssueID before GitHubIssueRepository: the invoker IssueCreate must
+                                     not create a second issue for this ticket -->
+                                <DynamicField>
+                                    <Name>GitHubIssueID</Name>
+                                    <Value><xsl:value-of select="$IssueID"/></Value>
+                                </DynamicField>
+                                <DynamicField>
+                                    <Name>GitHubIssueURL</Name>
+                                    <Value><xsl:value-of select="html_url"/></Value>
+                                </DynamicField>
+                                <DynamicField>
+                                    <Name>GitHubIssueRepository</Name>
+                                    <Value><xsl:value-of select="$Repository"/></Value>
+                                </DynamicField>
+                                <xsl:copy-of select="$Labels"/>
+                                <Article>
+                                    <SenderType>customer</SenderType>
+                                    <IsVisibleForCustomer>1</IsVisibleForCustomer>
+                                    <From><xsl:value-of select="concat(user/login, ' (GitHub)')"/></From>
+                                    <Subject><xsl:value-of select="title"/></Subject>
+                                    <Body><xsl:value-of select="concat(body, '&#10;&#10;-- &#10;', html_url)"/></Body>
+                                </Article>
+                                <Update>
+                                    <xsl:copy-of select="$Labels"/>
+                                </Update>
+                                <StateSync>
+                                    <IsClosed><xsl:value-of select="number(state = 'closed')"/></IsClosed>
+                                    <ClosedState>
+                                        <xsl:choose>
+                                            <xsl:when test="state_reason = 'not_planned'">closed unsuccessful</xsl:when>
+                                            <xsl:otherwise>closed successful</xsl:otherwise>
+                                        </xsl:choose>
+                                    </ClosedState>
+                                    <OpenState>open</OpenState>
+                                </StateSync>
+                                <xsl:if test="comments &gt; 0">
+                                    <FollowUp>
+                                        <Invoker>CommentsGet</Invoker>
+                                        <Data>
+                                            <Owner><xsl:value-of select="substring-before($Repository, '/')"/></Owner>
+                                            <Repo><xsl:value-of select="substring-after($Repository, '/')"/></Repo>
+                                            <Number><xsl:value-of select="number"/></Number>
+                                        </Data>
+                                    </FollowUp>
+                                </xsl:if>
+                            </Issue>
+                        </xsl:for-each>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      MappingOutbound:
+        Config:
+          Template: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:date="http://exslt.org/dates-and-times" extension-element-prefixes="date">
+                <xsl:output method="xml" encoding="utf-8" indent="yes"/>
+
+                <!-- Search query for GET /search/issues
+
+                     Organization: GitHub organization (or user) of the repositories, CHANGE-ME
+                     IssueType:    only issues of this issue type (organization setting), empty for all types
+                     Label:        only issues with this label, empty for all issues
+                     TimeWindow:   issues updated within this period (ISO 8601 duration, e.g. -PT15M),
+                                   empty for all open issues (initial load)
+                     Sort:         sort field of the result: updated (regular poll) or created (initial load,
+                                   stable order while paging)
+                     Page:         page of the result, 100 issues per page (initial load: 1, 2, 3, ...) -->
+                <xsl:variable name="Organization">CHANGE-ME</xsl:variable>
+                <xsl:variable name="IssueType"></xsl:variable>
+                <xsl:variable name="Label"></xsl:variable>
+                <xsl:variable name="TimeWindow">-PT15M</xsl:variable>
+                <xsl:variable name="Sort">updated</xsl:variable>
+                <xsl:variable name="Page">1</xsl:variable>
+
+                <xsl:template match="/RootElement">
+                    <xsl:variable name="Filter">
+                        <xsl:choose>
+                            <xsl:when test="$TimeWindow != ''">
+                                <xsl:value-of select="concat('updated:&gt;=', date:add(date:date-time(), $TimeWindow))"/>
+                            </xsl:when>
+                            <xsl:otherwise>is:open</xsl:otherwise>
+                        </xsl:choose>
+                    </xsl:variable>
+                    <xsl:variable name="TypeFilter">
+                        <xsl:if test="$IssueType != ''">
+                            <xsl:value-of select="concat(' type:&quot;', $IssueType, '&quot;')"/>
+                        </xsl:if>
+                    </xsl:variable>
+                    <xsl:variable name="LabelFilter">
+                        <xsl:if test="$Label != ''">
+                            <xsl:value-of select="concat(' label:&quot;', $Label, '&quot;')"/>
+                        </xsl:if>
+                    </xsl:variable>
+                    <RootElement>
+                        <q><xsl:value-of select="concat('org:', $Organization, ' is:issue ', $Filter, $TypeFilter, $LabelFilter)"/></q>
+                        <per_page>100</per_page>
+                        <page><xsl:value-of select="$Page"/></page>
+                        <sort><xsl:value-of select="$Sort"/></sort>
+                        <order>asc</order>
+                    </RootElement>
+                </xsl:template>
+            </xsl:stylesheet>
+        Type: XSLT
+      Type: GitHub::IssuePoll
+  Transport:
+    Config:
+      DefaultCommand: POST
+      Host: https://api.github.com
+      InvokerControllerMapping:
+        CommentCreate:
+          Command: POST
+          Controller: /repos/:Owner/:Repo/issues/:Number/comments
+        CommentsGet:
+          Command: GET
+          Controller: /repos/:Owner/:Repo/issues/:Number/comments
+        IssueClose:
+          Command: PATCH
+          Controller: /repos/:Owner/:Repo/issues/:Number
+        IssueCreate:
+          Command: POST
+          Controller: /repos/:Owner/:Repo/issues
+        IssuePoll:
+          Command: GET
+          Controller: /search/issues
+      OutboundHeaders:
+        Common:
+          Accept: application/vnd.github+json
+          Authorization: Bearer CHANGE-ME
+          X-GitHub-Api-Version: '2022-11-28'
+      SSLNoHostnameVerification: '0'
+      Timeout: '60'
+      UseProxy: 'No'
+    Type: HTTP::REST

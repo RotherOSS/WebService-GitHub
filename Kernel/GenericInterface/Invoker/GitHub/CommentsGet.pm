@@ -39,13 +39,13 @@ imported only once.
 
     Article => [
         {
-            MatchDynamicField    => { Name => 'OTOBOIssue-ExternalCommentID', Value => '6544623469' },
+            MatchDynamicField    => { Name => 'GitHubCommentID', Value => '6544623469' },
             SenderType           => 'customer',
             IsVisibleForCustomer => 1,
             From                 => 'octocat (GitHub)',
             Subject              => '...',
             Body                 => '...',
-            DynamicField         => [ { Name => 'OTOBOIssue-ExternalCommentID', Value => '6544623469' } ],
+            DynamicField         => [ { Name => 'GitHubCommentID', Value => '6544623469' } ],
         },
     ],
 

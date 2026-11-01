@@ -23,7 +23,7 @@
         </Value>
     </Setting>
     <Setting Name="Daemon::SchedulerCronTaskManager::Task###GitHubIssuePoll" Required="0" Valid="0" ConfigLevel="100">
-        <Description Translatable="1">Polls GitHub issues every 5 minutes. Params are the name of the web service and the name of the invoker of type GitHub::IssuePoll.</Description>
+        <Description Translatable="1">Polls GitHub issues every 5 minutes. Params are the name of the web service (default: the Ready2Adopt web service GitHubConnector) and the name of the invoker of type GitHub::IssuePoll.</Description>
         <Navigation>Daemon::SchedulerCronTaskManager::Task</Navigation>
         <Value>
             <Hash>
@@ -34,7 +34,7 @@
                 <Item Key="MaximumParallelInstances">1</Item>
                 <Item Key="Params">
                     <Array>
-                        <Item>GitHub</Item>
+                        <Item>GitHubConnector</Item>
                         <Item>IssuePoll</Item>
                     </Array>
                 </Item>

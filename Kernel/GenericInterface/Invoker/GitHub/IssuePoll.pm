@@ -38,7 +38,7 @@ following structure, which is executed by this invoker:
 
     Issue => [
         {
-            MatchDynamicField => { Name => 'OTOBOIssue-ExternalID', Value => 'RotherOSS/otobo#123' },
+            MatchDynamicField => { Name => 'GitHubIssueID', Value => 'RotherOSS/otobo#123' },
 
             # only used if no ticket is found, SkipCreate => 1 only updates existing tickets
             SkipCreate   => 0,
@@ -48,7 +48,7 @@ following structure, which is executed by this invoker:
 
             # only used for existing tickets, values are only set if they changed
             Update => {
-                DynamicField => [ { Name => 'OTOBOIssue-Labels', Value => [ 'bug', 'documentation' ] } ],
+                DynamicField => [ { Name => 'GitHubIssueLabels', Value => [ 'bug', 'documentation' ] } ],
             },
             StateSync => {
                 IsClosed    => 1,                     # state of the issue

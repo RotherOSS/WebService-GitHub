@@ -6,13 +6,19 @@
     <Vendor>Rother OSS GmbH</Vendor>
     <URL>https://otobo.io/</URL>
     <License>GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007</License>
-    <Description Lang="en">Web service invokers to import GitHub issues and comments as tickets and articles and keep their state in sync.</Description>
-    <Description Lang="de">Webservice-Invoker, die GitHub-Issues und -Kommentare als Tickets und Artikel importieren und den Status abgleichen.</Description>
+    <Description Lang="en">Connects OTOBO with GitHub issues: imports issues and comments as tickets and articles, keeps state and labels in sync and includes the Ready2Adopt web service GitHubConnector.</Description>
+    <Description Lang="de">Verbindet OTOBO mit GitHub Issues: importiert Issues und Kommentare als Tickets und Artikel, gleicht Status und Labels ab und enthält den Ready2Adopt Webservice GitHubConnector.</Description>
     <Filelist>
         <File Permission="660" Location="Kernel/Config/Files/XML/WebServiceGitHub.xml"/>
+        <File Permission="660" Location="Kernel/GenericInterface/Event/Validation/GitHubIssueNotCreated.pm"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/Common.pm"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/CommentsGet.pm"/>
         <File Permission="660" Location="Kernel/GenericInterface/Invoker/GitHub/IssuePoll.pm"/>
-        <File Permission="660" Location="doc/content/index.rst"/>
+        <File Permission="660" Location="Kernel/Language/de_WebServiceGitHub.pm"/>
+        <File Permission="660" Location="scripts/test/GenericInterface/Event/Validation/GitHubIssueNotCreated.t"/>
+        <File Permission="660" Location="scripts/test/GenericInterface/Invoker/GitHub/CommentsGet.t"/>
+        <File Permission="660" Location="scripts/test/GenericInterface/Invoker/GitHub/IssuePoll.t"/>
+        <File Permission="660" Location="var/webservices/examples/GitHubConnector.yml"/>
+        <File Permission="660" Location="var/webservices/examples/GitHubConnector_pre.pm"/>
     </Filelist>
 </otobo_package>
