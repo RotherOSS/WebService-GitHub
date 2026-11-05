@@ -157,6 +157,39 @@ subtest 'comments are imported once' => sub {
     is( scalar @Articles, 3, 'three articles' );
 };
 
+subtest 'Markdown comment is stored as HTML article' => sub {
+    my $Comment = $Comment->(104);
+    $Comment->{Body}        = "Some **bold** text\n\n- one\n- two";
+    $Comment->{ContentType} = 'text/markdown; charset=utf-8';
+
+    my $Result = $InvokerObject->HandleResponse(
+        ResponseSuccess => 1,
+        Data            => {
+            Article => [$Comment],
+        },
+    );
+    is( $Result->{Data}->{Created}, 1, 'article created' );
+
+    my @Articles = $ArticleObject->ArticleList( TicketID => $TicketID );
+    my $ArticleBackendObject = $ArticleObject->BackendForArticle( %{ $Articles[-1] } );
+
+    # OTOBO stores the HTML body as attachment 'file-2' and the plain text version in the article body
+    my %AttachmentIndex = $ArticleBackendObject->ArticleAttachmentIndex(
+        ArticleID    => $Articles[-1]->{ArticleID},
+        OnlyHTMLBody => 1,
+    );
+    my ($HTMLBodyAttachmentID) = sort keys %AttachmentIndex;
+    ok( $HTMLBodyAttachmentID, 'article has an HTML body' );
+
+    my %Attachment = $ArticleBackendObject->ArticleAttachment(
+        TicketID  => $TicketID,
+        ArticleID => $Articles[-1]->{ArticleID},
+        FileID    => $HTMLBodyAttachmentID,
+    );
+    like( $Attachment{Content}, qr{<strong>bold</strong>}, 'Markdown was converted to HTML' );
+    like( $Attachment{Content}, qr{<li>two</li>},          'list was converted to HTML' );
+};
+
 subtest 'no comments' => sub {
     my $Result = $InvokerObject->HandleResponse(
         ResponseSuccess => 1,

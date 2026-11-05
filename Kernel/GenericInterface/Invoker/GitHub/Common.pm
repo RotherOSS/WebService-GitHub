@@ -378,7 +378,7 @@ Creates an article (default channel Internal) and sets its dynamic fields.
             From                 => 'octocat (GitHub)',
             Subject              => 'Comment',
             Body                 => 'Text',
-            ContentType          => 'text/plain; charset=utf-8',   # optional
+            ContentType          => 'text/plain; charset=utf-8',   # optional, text/markdown is converted to HTML
             HistoryType          => 'AddNote',                     # optional
             DynamicField         => [ ... ],                       # optional
         },
@@ -401,14 +401,39 @@ sub ArticleAdd {
         ChannelName => $Article->{CommunicationChannel} || 'Internal',
     );
 
+    my $Body        = $Article->{Body} // '';
+    my $ContentType = $Article->{ContentType} || 'text/plain; charset=utf-8';
+
+    # GitHub delivers issue and comment texts as Markdown. With the content type text/markdown the body
+    # is converted to HTML and stored as HTML article. Kernel::System::Markdown comes with the required
+    # package Webservice-Markdown.
+    if ( $ContentType =~ m{\Atext/markdown}i ) {
+
+        my $HTMLBody = $Kernel::OM->Get('Kernel::System::Markdown')->ToHTML(
+            String => $Body,
+        );
+
+        # the conversion fails only when the CPAN module Markdown::Perl is missing, the error has been logged
+        if ( !defined $HTMLBody ) {
+            $Self->{DebuggerObject}->Error(
+                Summary => "Markdown of the article could not be converted to HTML, no article created for ticket $Param{TicketID}",
+                Data    => $Article,
+            );
+            return;
+        }
+
+        $Body = $HTMLBody;
+        $ContentType =~ s{\Atext/markdown}{text/html}i;
+    }
+
     my $ArticleID = $ArticleBackendObject->ArticleCreate(
         TicketID             => $Param{TicketID},
         SenderType           => $Article->{SenderType} || 'customer',
         IsVisibleForCustomer => $Article->{IsVisibleForCustomer} ? 1 : 0,
         From                 => $Article->{From},
         Subject              => $Article->{Subject},
-        Body                 => $Article->{Body} // '',
-        ContentType          => $Article->{ContentType} || 'text/plain; charset=utf-8',
+        Body                 => $Body,
+        ContentType          => $ContentType,
         HistoryType          => $Article->{HistoryType} || 'AddNote',
         HistoryComment       => "Imported by web service invoker $Self->{Invoker}",
         UserID               => 1,

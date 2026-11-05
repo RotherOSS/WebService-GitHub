@@ -8,6 +8,7 @@
     <License>GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007</License>
     <Description Lang="en">Connects OTOBO with GitHub issues: imports issues and comments as tickets and articles, keeps state and labels in sync and includes the Ready2Adopt web service GitHubConnector.</Description>
     <Description Lang="de">Verbindet OTOBO mit GitHub Issues: importiert Issues und Kommentare als Tickets und Artikel, gleicht Status und Labels ab und enthält den Ready2Adopt Webservice GitHubConnector.</Description>
+    <PackageRequired Version="11.1.1">Webservice-Markdown</PackageRequired>
     <Filelist>
         <File Permission="660" Location="Kernel/Config/Files/XML/WebServiceGitHub.xml"/>
         <File Permission="660" Location="Kernel/GenericInterface/Event/Validation/GitHubIssueNotCreated.pm"/>

@@ -53,6 +53,7 @@ Requester:
                 </xsl:template>
             </xsl:stylesheet>
         Type: XSLT
+      ConvertArticleBodyToMarkdown: '1'
       RequestArticleFields:
       - Body
       - From
@@ -98,6 +99,7 @@ Requester:
                                 <From><xsl:value-of select="concat(user/login, ' (GitHub)')"/></From>
                                 <Subject><xsl:value-of select="concat('Comment of ', user/login, ' on GitHub')"/></Subject>
                                 <Body><xsl:value-of select="concat(body, '&#10;&#10;-- &#10;', html_url)"/></Body>
+                                <ContentType>text/markdown; charset=utf-8</ContentType>
                                 <DynamicField>
                                     <Name>GitHubCommentID</Name>
                                     <Value><xsl:value-of select="id"/></Value>
@@ -263,6 +265,7 @@ Requester:
                 </xsl:template>
             </xsl:stylesheet>
         Type: XSLT
+      ConvertArticleBodyToMarkdown: '1'
       RequestArticleFields:
       - Body
       - From
@@ -359,6 +362,7 @@ Requester:
                                     <From><xsl:value-of select="concat(user/login, ' (GitHub)')"/></From>
                                     <Subject><xsl:value-of select="title"/></Subject>
                                     <Body><xsl:value-of select="concat(body, '&#10;&#10;-- &#10;', html_url)"/></Body>
+                                    <ContentType>text/markdown; charset=utf-8</ContentType>
                                 </Article>
                                 <Update>
                                     <xsl:copy-of select="$Labels"/>

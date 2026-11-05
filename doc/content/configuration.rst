@@ -9,8 +9,9 @@ Framework
     OTOBO 11.1.x
 
 Packages
-    No other packages are needed. ``ITSMConfigurationManagement`` is only needed for the
-    optional ``ConfigItemLookup`` of dynamic fields.
+    ``Webservice-Markdown`` is required: it converts the Markdown of GitHub issues and comments
+    to HTML and the HTML of articles to Markdown. ``ITSMConfigurationManagement`` is only needed
+    for the optional ``ConfigItemLookup`` of dynamic fields.
 
 GitHub
     A token (fine-grained personal access token or token of a GitHub App) with read and write
@@ -87,6 +88,16 @@ not possible with the condition types *String* and *Regexp*. Without it, changin
 of a ticket would create a second issue.
 
 CommentCreate posts only the name of the agent, not the e-mail address.
+
+Markdown
+    GitHub renders issue and comment texts as Markdown. The package ``Webservice-Markdown``
+    converts the texts in both directions:
+
+    - ``IssueCreate`` and ``CommentCreate`` have the option ``ConvertArticleBodyToMarkdown`` set,
+      so the HTML body of the article is sent as Markdown.
+    - ``IssuePoll`` and ``CommentsGet`` create the articles with the content type
+      ``text/markdown``, which ``ArticleAdd()`` converts to HTML. The articles are stored as
+      HTML articles.
 
 
 .. _invoker-issuepoll:
